@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from github3 import login
-import ConfigParser
+from configobj import ConfigObj
 from collections import namedtuple
 import pprint
 
@@ -14,20 +14,18 @@ GithubConfig = namedtuple('GithubConfig', ['token', 'identifier'])
 
 class ConfigSession:
     def __init__(self, config, session_name):
-        self.name = session_name
-        self.config = config
+        self.session = config[session_name]
 
     def get(self, option):
-        return self.config.get(self.name, option)
+        return self.session.get(option)
 
     def getint(self, option):
-        return self.config.getint(self.name, option)
+        return int(self.session.get(option))
 
 
 class GirelloConfig:
     def __init__(self, filename='settings.cfg'):
-        self.config = ConfigParser.ConfigParser()
-        self.config.read(filename)
+        self.config = ConfigObj(filename)
 
         github_section = ConfigSession(self.config, 'Github')
         self.github = GithubConfig(
