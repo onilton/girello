@@ -192,6 +192,21 @@ class CreateBranchEvent:
         self.__dict__.update(entries)
 
 
+class EventFactory:
+    def create_event(self, gh_event):
+        if event.type == 'PushEvent':
+            return PushEvent(**(gh_event.payload))
+
+        if event.type == 'PullRequestEvent':
+            return PullRequestEvent(**(gh_event.payload))
+
+        if (event.type == 'CreateEvent' and
+                event.payload['ref_type'] == 'branch'):
+            return CreateBranchEvent(**(gh_event.payload))
+
+        return None
+
+
 config = GirelloConfig()
 gh = login(token=config.github.token)
 trello = TrelloClient(
@@ -205,6 +220,8 @@ trello = TrelloClient(
 user = gh.user()
 orgs = [org for org in gh.iter_orgs() if org.login in config.allowed_orgs]
 
+event_factory = EventFactory()
+
 for org in orgs:
     print "org.login=" + org.login
     print "org.name=" + org.name
@@ -215,7 +232,7 @@ for org in orgs:
         print "event_id="+event.id
         print "event_type="+event.type
         if event.type == 'PushEvent':
-            push_event = PushEvent(**(event.payload))
+            push_event = event_factory.create_event(event)
             #print push_event.ref
             #print push_event.size
             print "branch="+push_event.branch
@@ -225,13 +242,13 @@ for org in orgs:
         if event.type == 'PullRequestEvent':
             #print "PULL="+repr(event.payload['pull_request'].__dict__['head'].__dict__)
             #pp.pprint(event.payload['pull_request'].__dict__['head'].__dict__)
-            pull_request_event = PullRequestEvent(**event.payload)
+            pull_request_event = event_factory.create_event(event)
             print "branch_to_merge=" + pull_request_event.branch_to_merge
             print "action=" + pull_request_event.action
 
         if (event.type == 'CreateEvent' and
                 event.payload['ref_type'] == 'branch'):
-            create_branch_event = CreateBranchEvent(**event.payload)
+            create_branch_event = event_factory.create_event(event)
             print "branch_ref=" + create_branch_event.ref
             print "master_branch=" + create_branch_event.master_branch
 
