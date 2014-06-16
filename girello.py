@@ -159,6 +159,8 @@ class GirelloConfig:
 
         self.allowed_orgs = set(allowed_orgs_list)
 
+        # We ignore board session names
+        raw_boards = girello_section.get('boards', dict()).values()
         self.boards = dict((b['name'], b) for b in raw_boards)
 
 class CommitEvent:
