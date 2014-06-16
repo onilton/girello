@@ -150,9 +150,14 @@ class GirelloConfig:
         )
 
         girello_section = ConfigSession(self.config, 'Girello')
-        self.allowed_orgs = set(
-            girello_section.get('allowed_orgs')
-        )
+
+        temp_allowed_orgs = girello_section.get('allowed_orgs')
+        if isinstance(temp_allowed_orgs, basestring):
+            allowed_orgs_list = list(temp_allowed_orgs)
+        else:
+            allowed_orgs_list = temp_allowed_orgs
+
+        self.allowed_orgs = set(allowed_orgs_list)
 
         self.boards = dict((b['name'], b) for b in raw_boards)
 
