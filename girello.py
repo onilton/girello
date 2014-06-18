@@ -67,6 +67,13 @@ class GirelloTrello:
         return boards_for_repo
 
 
+class GirelloBranch:
+    def __init__(self, repo, name):
+        self.repo = repo
+        self.name = name
+        self.card_tag = "["+self.repo[1]+"/"+self.name+"]"
+
+
 class GirelloBoard:
     def __init__(self,
                  board,
@@ -103,6 +110,13 @@ class GirelloBoard:
             for c in l.list_cards():
                 #if c.name.find(card_name) != -1: #substring
                 if c.name == card_name:
+                    return c
+        return None
+
+    def find_card_by_substr(self, card_name_substr):
+        for l in self.open_lists:
+            for c in l.list_cards():
+                if c.name.find(card_name_substr) != -1:  # substring
                     return c
         return None
 
@@ -184,12 +198,54 @@ class PushEvent:
 class PullRequestEvent:
     def __init__(self, **entries):
         self.__dict__.update(entries)
-        self.branch_to_merge = self.pull_request.head.ref
+
+        # the branch (of the pull request)
+        branch_name = self.pull_request.head.ref
+        repo = self.pull_request.head.repo
+        self.branch_to_merge = GirelloBranch(repo, branch_name)
+
+    def sync_with_boards(self, parent_event, girello_trello):
+        affected_boards = girello_trello.get_boards_for_repo(
+            parent_event.repo[1]
+        )
+
+        # new pull request
+        if self.action == 'opened':
+            for board in affected_boards:
+                card = board.find_card_by_substr(self.branch_to_merge.card_tag)
+                if card is not None:
+                    # card found, move to review list
+                    card.change_list(board.review_list.id)
+
+        # closed pull request
+        if self.action == 'closed':
+            for board in affected_boards:
+                card = board.find_card_by_substr(self.branch_to_merge.card_tag)
+                if card is not None:
+                    # card found, move to done list
+                    card.change_list(board.done_list.id)
 
 
 class CreateBranchEvent:
     def __init__(self, **entries):
         self.__dict__.update(entries)
+
+    def sync_with_boards(self, parent_event, girello_trello):
+        affected_boards = girello_trello.get_boards_for_repo(
+            parent_event.repo[1]
+        )
+
+        # the new branch
+        branch = GirelloBranch(parent_event.repo, self.ref)
+
+        for board in affected_boards:
+            card = board.find_card_by_substr(branch.card_tag)
+            if card is not None:
+                # card found, move to doing list
+                card.change_list(board.doing_list.id)
+            else:
+                # card not found, create one in doing list
+                board.doing_list.add_card(branch.card_tag)
 
 
 class EventFactory:
@@ -215,6 +271,8 @@ trello = TrelloClient(
     token=config.trello.token,
     token_secret=config.trello.token_secret,
 )
+
+girello_trello = GirelloTrello(trello.list_boards(), config.boards)
 #auth = gh.authorization(config.github.identifier)
 #print pp.pprint(gh.rate_limit())
 user = gh.user()
@@ -243,14 +301,18 @@ for org in orgs:
             #print "PULL="+repr(event.payload['pull_request'].__dict__['head'].__dict__)
             #pp.pprint(event.payload['pull_request'].__dict__['head'].__dict__)
             pull_request_event = event_factory.create_event(event)
-            print "branch_to_merge=" + pull_request_event.branch_to_merge
+            print "branch_to_merge=" + pull_request_event.branch_to_merge.card_tag
             print "action=" + pull_request_event.action
+            pull_request_event.sync_with_boards(event, girello_trello)
 
         if (event.type == 'CreateEvent' and
                 event.payload['ref_type'] == 'branch'):
             create_branch_event = event_factory.create_event(event)
             print "branch_ref=" + create_branch_event.ref
             print "master_branch=" + create_branch_event.master_branch
+            print "event_repo="+str(event.repo)
+
+            create_branch_event.sync_with_boards(event, girello_trello)
 
         print "event_actor="+event.actor.login
         #event.actor.refresh()
@@ -263,7 +325,6 @@ for org in orgs:
         #print event.to_json()
         print ""
 
-gi_trello = GirelloTrello(trello.list_boards(), config.boards)
 print "girello_trello"
 for b in girello_trello.boards:
     print "b.id=" + b.info.id
