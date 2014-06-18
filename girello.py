@@ -90,13 +90,13 @@ class GirelloBoard:
                 self.done_list = l
 
             if l.name == doing_list_name:
-                self.doing_list_name = l
+                self.doing_list = l
 
             if self.doing_list is None:
                 self.lists_before_doing.append(l)
 
             if l.name == review_list_name:
-                self.review_list_name = l
+                self.review_list = l
 
     def find_card(self, card_name):
         for l in self.open_lists:
