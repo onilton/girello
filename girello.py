@@ -192,7 +192,33 @@ class PushEvent:
 
         self.commits = commitsObjects
 
-        self.branch = self.ref.split('/')[-1]
+        # removes prefix refs/heads/ from ref
+        self.branch_name = '/'.join(self.ref.split('/')[2:])
+
+    def sync_with_boards(self, parent_event, girello_trello):
+        affected_boards = girello_trello.get_boards_for_repo(
+            parent_event.repo[1]
+        )
+
+        # the branch
+        branch = GirelloBranch(parent_event.repo, self.branch_name)
+
+        for board in affected_boards:
+            card = board.find_card_by_substr(branch.card_tag)
+            if card is not None:
+                # If the card have no name, only the tag
+                if card.name == branch.card_tag:
+                    # First commit becomes the card name
+                    card.name += ' ' + self.commits[0].message
+                    card._set_remote_attribute('name', card.name)
+
+                # Append commits to description
+                for commit in self.commits:
+                    card.set_description(
+                        card.description + '\n' +
+                        commit.sha[0:7] + ' - ' +
+                        commit.message
+                    )
 
 
 class PullRequestEvent:
@@ -292,11 +318,13 @@ for org in orgs:
         if event.type == 'PushEvent':
             push_event = event_factory.create_event(event)
             #print push_event.ref
-            #print push_event.size
-            print "branch="+push_event.branch
+            print "branch="+push_event.branch_name
+            print "num_of_commits=" + str(push_event.size)
             #print repr(push_event)
             #print repr(push_event.commits[0])
             pp.pprint(push_event.commits[0].__dict__)
+            push_event.sync_with_boards(event, girello_trello)
+
         if event.type == 'PullRequestEvent':
             #print "PULL="+repr(event.payload['pull_request'].__dict__['head'].__dict__)
             #pp.pprint(event.payload['pull_request'].__dict__['head'].__dict__)
