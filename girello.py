@@ -228,7 +228,7 @@ for org in orgs:
     print "org.members:" + org.login
     #events = user.iter_org_events(org.name)
     events = user.iter_org_events(org.login, 10)
-    for event in events:
+    for event in reversed(list(events)):
         print "event_id="+event.id
         print "event_type="+event.type
         if event.type == 'PushEvent':
