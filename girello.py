@@ -181,6 +181,14 @@ class CommitEvent:
     def __init__(self, **entries):
         self.__dict__.update(entries)
 
+        self.browser_url = self.url.replace(
+            'https://api.github.com/repos/',
+            'https://github.com/'
+        ).replace(
+            '/commits/',
+            '/commit/',
+        )
+
 
 class PushEvent:
     def __init__(self, **entries):
@@ -215,9 +223,16 @@ class PushEvent:
                 # Append commits to description
                 for commit in self.commits:
                     card.set_description(
-                        card.description + '\n' +
-                        commit.sha[0:7] + ' - ' +
-                        commit.message
+                        (
+                            '{description}\n' +
+                            '**[{short_sha}]({browser_url})** - {message}'
+                        ).format(
+                            #description='VAI DESCRIPTION testando',
+                            description=card.description,
+                            short_sha=commit.sha[0:7],
+                            browser_url=commit.browser_url,
+                            message=commit.message
+                        )
                     )
 
 
@@ -322,6 +337,7 @@ for org in orgs:
             print "num_of_commits=" + str(push_event.size)
             #print repr(push_event)
             #print repr(push_event.commits[0])
+            print "browser_url="+push_event.commits[0].browser_url
             pp.pprint(push_event.commits[0].__dict__)
             push_event.sync_with_boards(event, girello_trello)
 
