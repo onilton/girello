@@ -224,7 +224,7 @@ class PushEvent:
                 commit_list_str = ''
                 for commit in self.commits:
                     commit_list_str += (
-                        '**[{short_sha}]({browser_url})** - {message}'
+                        '\n**[{short_sha}]({browser_url})** - {message}'
                     ).format(
                         short_sha=commit.sha[0:7],
                         browser_url=commit.browser_url,
