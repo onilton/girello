@@ -106,18 +106,15 @@ class GirelloBoard:
                 self.review_list = l
 
     def find_card(self, card_name):
-        for l in self.open_lists:
-            for c in l.list_cards():
-                #if c.name.find(card_name) != -1: #substring
-                if c.name == card_name:
-                    return c
+        for c in self.info.open_cards():
+            if c.name == card_name:
+                return c
         return None
 
     def find_card_by_substr(self, card_name_substr):
-        for l in self.open_lists:
-            for c in l.list_cards():
-                if c.name.find(card_name_substr) != -1:  # substring
-                    return c
+        for c in self.info.open_cards():
+            if c.name.find(card_name_substr) != -1:  # substring
+                return c
         return None
 
     def find_list(self, list_name):
