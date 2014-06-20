@@ -220,20 +220,21 @@ class PushEvent:
                     card.name += ' ' + self.commits[0].message
                     card._set_remote_attribute('name', card.name)
 
-                # Append commits to description
+                # Build list of commits string
+                commit_list_str = ''
                 for commit in self.commits:
-                    card.set_description(
-                        (
-                            '{description}\n' +
-                            '**[{short_sha}]({browser_url})** - {message}'
-                        ).format(
-                            #description='VAI DESCRIPTION testando',
-                            description=card.description,
-                            short_sha=commit.sha[0:7],
-                            browser_url=commit.browser_url,
-                            message=commit.message
-                        )
+                    commit_list_str += (
+                        '**[{short_sha}]({browser_url})** - {message}'
+                    ).format(
+                        short_sha=commit.sha[0:7],
+                        browser_url=commit.browser_url,
+                        message=commit.message
                     )
+
+                # Append commits list to description
+                card.set_description(
+                    card.description + commit_list_str
+                )
 
 
 class PullRequestEvent:
