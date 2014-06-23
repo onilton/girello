@@ -18,21 +18,23 @@ TrelloConfig = namedtuple(
 
 
 class GirelloTrello:
-    def __init__(self, boards, config_boards):
+    def __init__(self, boards, config, github_users):
         # TO-DO: implement a warning when a board in config_boards does not
         # exist in boards
 
         self.boards = []
 
-        print "GirelloTrello config_boards"
-        pp.pprint(config_boards)
+        # print "GirelloTrello config_boards"
+        # pp.pprint(config.boards)
         for board in boards:
-            print "GirelloTrello dname="+board.name
-            if board.name in config_boards:
-                board_config = config_boards[board.name]
+            # print "GirelloTrello dname="+board.name
+            if board.name in config.boards:
+                board_config = config.boards[board.name]
 
                 gi_board = GirelloBoard(
                     board,
+                    config,
+                    github_users,
                     doing_list_name=board_config.get('doing_list'),
                     review_list_name=board_config.get('review_list'),
                     repositories=board_config.get('repositories', list()),
@@ -74,15 +76,39 @@ class GirelloBranch:
         self.card_tag = "["+self.repo[1]+"/"+self.name+"]"
 
 
+class UsersMapper:
+    def __init__(self, trello_users, github_users, config):
+        self.usernames_map = config.usernames_map
+
+        self.trello_users = {}
+        for user in trello_users:
+            self.trello_users[user.username] = user
+
+        self.github_users = {}
+        for user in github_users:
+            self.github_users[user.login] = user
+
+    def get_trello_user(self, github_login):
+        trello_username = self.usernames_map.get(github_login, github_login)
+
+        if trello_username in self.trello_users:
+            return self.trello_users[trello_username]
+        return None
+
+
 class GirelloBoard:
     def __init__(self,
                  board,
+                 config,
+                 github_users,
                  doing_list_name=None,
                  review_list_name=None,
                  repositories=None,
                  exclude_repositories=None):
 
         self.info = board
+        self.members = board.all_members()
+        self.users_mapper = UsersMapper(self.members, github_users, config)
         self.open_lists = board.open_lists()
         self.doing_list = None
         self.review_list = None
@@ -174,6 +200,16 @@ class GirelloConfig:
         raw_boards = girello_section.get('boards', dict()).values()
         self.boards = dict((b['name'], b) for b in raw_boards)
 
+        # We ignore username session names
+        raw_usernames_map = girello_section.get(
+            'usernames',
+            dict()
+        ).values()
+
+        self.usernames_map = dict((u['github'], u['trello'])
+                                  for u in raw_usernames_map)
+
+
 class CommitEvent:
     def __init__(self, **entries):
         self.__dict__.update(entries)
@@ -228,10 +264,30 @@ class PushEvent:
                         message=commit.message
                     )
 
+                # TODO: check description size:
+                # Max description size is 16385
                 # Append commits list to description
                 card.set_description(
                     card.description + commit_list_str
                 )
+
+                trello_user = board.users_mapper.get_trello_user(
+                    parent_event.actor.login
+                )
+
+                if trello_user is not None:
+                    # Fix error in py-trello
+                    if (hasattr(card, 'idMembers') and
+                            (not hasattr(card, 'members_ids'))):
+                        setattr(card, 'member_ids', card.idMembers)
+                    else:
+                        setattr(card, 'member_ids', list())
+
+                    # If user is not already in card members
+                    # add it
+                    if trello_user.id not in card.member_ids:
+                        card.assign(trello_user.id)
+                        card.member_ids.append(trello_user.id)
 
 
 class PullRequestEvent:
@@ -311,11 +367,18 @@ trello = TrelloClient(
     token_secret=config.trello.token_secret,
 )
 
-girello_trello = GirelloTrello(trello.list_boards(), config.boards)
 #auth = gh.authorization(config.github.identifier)
 #print pp.pprint(gh.rate_limit())
 user = gh.user()
 orgs = [org for org in gh.iter_orgs() if org.login in config.allowed_orgs]
+
+
+github_members = set()
+for org in orgs:
+    for member in org.iter_members():
+        github_members.add(member)
+
+girello_trello = GirelloTrello(trello.list_boards(), config, github_members)
 
 event_factory = EventFactory()
 
