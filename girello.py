@@ -131,13 +131,13 @@ class GirelloBoard:
             if l.name == review_list_name:
                 self.review_list = l
 
-    def find_card(self, card_name):
+    def find_open_card(self, card_name):
         for c in self.info.open_cards():
             if c.name == card_name:
                 return c
         return None
 
-    def find_card_by_substr(self, card_name_substr):
+    def find_open_card_by_substr(self, card_name_substr):
         for c in self.info.open_cards():
             if c.name.find(card_name_substr) != -1:  # substring
                 return c
@@ -245,7 +245,7 @@ class PushEvent:
         branch = GirelloBranch(parent_event.repo, self.branch_name)
 
         for board in affected_boards:
-            card = board.find_card_by_substr(branch.card_tag)
+            card = board.find_open_card_by_substr(branch.card_tag)
             if card is not None:
                 # If the card have no name, only the tag
                 if card.name == branch.card_tag:
@@ -307,7 +307,7 @@ class PullRequestEvent:
         # new pull request
         if self.action == 'opened':
             for board in affected_boards:
-                card = board.find_card_by_substr(self.branch_to_merge.card_tag)
+                card = board.find_open_card_by_substr(self.branch_to_merge.card_tag)
                 if card is not None:
                     # card found, move to review list
                     card.change_list(board.review_list.id)
@@ -315,7 +315,7 @@ class PullRequestEvent:
         # closed pull request
         if self.action == 'closed':
             for board in affected_boards:
-                card = board.find_card_by_substr(self.branch_to_merge.card_tag)
+                card = board.find_open_card_by_substr(self.branch_to_merge.card_tag)
                 if card is not None:
                     # card found, move to done list
                     card.change_list(board.done_list.id)
@@ -334,7 +334,7 @@ class CreateBranchEvent:
         branch = GirelloBranch(parent_event.repo, self.ref)
 
         for board in affected_boards:
-            card = board.find_card_by_substr(branch.card_tag)
+            card = board.find_open_card_by_substr(branch.card_tag)
             if card is not None:
                 # card found, move to doing list
                 card.change_list(board.doing_list.id)
