@@ -115,6 +115,21 @@ class GirelloBoard:
         self.done_list = None
         self.lists_before_doing = []
 
+        # Get girello status card for board
+        self.girello_status_card = self.find_card_by_tag(
+            '[Girello Status]'
+        )
+
+        # If the card doesn't exist, we create it
+        if self.girello_status_card is None:
+            first_list = (self.info.all_lists())[0]
+            self.girello_status_card = first_list.add_card('[Girello Status]')
+
+        # If the card is not hidden, we hide it.
+        self.girello_status_card.set_closed(True)
+
+        self.fetch_last_event_id()
+
         self.repositories = repositories
         self.exclude_repositories = exclude_repositories
 
@@ -131,14 +146,41 @@ class GirelloBoard:
             if l.name == review_list_name:
                 self.review_list = l
 
+    def _get_last_event_id(self):
+        # (re)fetch girello status card info
+        self.girello_status_card.fetch()
+
+        if self.girello_status_card.description.find('=') != -1:
+            last_event_key = self.girello_status_card.description.split('=')
+            if last_event_key[0] == 'last_event_id':
+                last_event_id = last_event_key[1].strip()
+                if last_event_id is not None:
+                    return int(last_event_id)
+
+        return None
+
+    def fetch_last_event_id(self):
+        self.last_event_id = self._get_last_event_id()
+
+    def save_last_event_id(self):
+        self.girello_status_card.set_description(
+            "last_event_id=" + str(self.last_event_id)
+        )
+
     def find_open_card(self, card_name):
         for c in self.info.open_cards():
             if c.name == card_name:
                 return c
         return None
 
-    def find_open_card_by_substr(self, card_name_substr):
+    def find_open_card_by_tag(self, card_name_substr):
         for c in self.info.open_cards():
+            if c.name.find(card_name_substr) != -1:  # substring
+                return c
+        return None
+
+    def find_card_by_tag(self, card_name_substr):
+        for c in self.info.all_cards():
             if c.name.find(card_name_substr) != -1:  # substring
                 return c
         return None
@@ -245,7 +287,11 @@ class PushEvent:
         branch = GirelloBranch(parent_event.repo, self.branch_name)
 
         for board in affected_boards:
-            card = board.find_open_card_by_substr(branch.card_tag)
+            if (int(parent_event.id) <= board.last_event_id and
+                    board.last_event_id is not None):
+                continue
+
+            card = board.find_open_card_by_tag(branch.card_tag)
             if card is not None:
                 # If the card have no name, only the tag
                 if card.name == branch.card_tag:
@@ -289,6 +335,8 @@ class PushEvent:
                         card.assign(trello_user.id)
                         card.member_ids.append(trello_user.id)
 
+            board.last_event_id = int(parent_event.id)
+
 
 class PullRequestEvent:
     def __init__(self, **entries):
@@ -307,18 +355,30 @@ class PullRequestEvent:
         # new pull request
         if self.action == 'opened':
             for board in affected_boards:
-                card = board.find_open_card_by_substr(self.branch_to_merge.card_tag)
-                if card is not None:
-                    # card found, move to review list
-                    card.change_list(board.review_list.id)
+                if (int(parent_event.id) > board.last_event_id or
+                        board.last_event_id is None):
+                    card = board.find_open_card_by_tag(
+                        self.branch_to_merge.card_tag
+                    )
+                    if card is not None:
+                        # card found, move to review list
+                        card.change_list(board.review_list.id)
+
+                    board.last_event_id = int(parent_event.id)
 
         # closed pull request
         if self.action == 'closed':
             for board in affected_boards:
-                card = board.find_open_card_by_substr(self.branch_to_merge.card_tag)
-                if card is not None:
-                    # card found, move to done list
-                    card.change_list(board.done_list.id)
+                if (int(parent_event.id) > board.last_event_id or
+                        board.last_event_id is None):
+                    card = board.find_open_card_by_tag(
+                        self.branch_to_merge.card_tag
+                    )
+                    if card is not None:
+                        # card found, move to done list
+                        card.change_list(board.done_list.id)
+
+                    board.last_event_id = int(parent_event.id)
 
 
 class CreateBranchEvent:
@@ -334,13 +394,17 @@ class CreateBranchEvent:
         branch = GirelloBranch(parent_event.repo, self.ref)
 
         for board in affected_boards:
-            card = board.find_open_card_by_substr(branch.card_tag)
-            if card is not None:
-                # card found, move to doing list
-                card.change_list(board.doing_list.id)
-            else:
-                # card not found, create one in doing list
-                board.doing_list.add_card(branch.card_tag)
+            if (int(parent_event.id) > board.last_event_id or
+                    board.last_event_id is None):
+                card = board.find_open_card_by_tag(branch.card_tag)
+                if card is not None:
+                    # card found, move to doing list
+                    card.change_list(board.doing_list.id)
+                else:
+                    # card not found, create one in doing list
+                    board.doing_list.add_card(branch.card_tag)
+
+                board.last_event_id = int(parent_event.id)
 
 
 class EventFactory:
@@ -431,6 +495,9 @@ for org in orgs:
         print ""
 
 print "girello_trello"
+
+# Save last processed github event id in each board
 for b in girello_trello.boards:
     print "b.id=" + b.info.id
     print "b.name=" + b.info.name
+    b.save_last_event_id()
